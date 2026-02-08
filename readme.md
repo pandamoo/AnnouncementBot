@@ -59,6 +59,7 @@ current stock themselves. It also removes old offers when they sell out.
   - Example: `/setprice 12 30`
 - `/soldout <id>` or `/remove <id>`
 - `/announce <id>` - re-send the announcement
+- `/setannounce [chat_id]` - set the announcements chat
 - `/upload` - guided file upload for announcements
 - `/cancel` - exit the current guided step
 
@@ -66,13 +67,15 @@ current stock themselves. It also removes old offers when they sell out.
 
 The bot shows a button menu you can tap instead of typing commands. Admins
 get extra buttons for guided prompts (add offer, update qty/price, sold out,
-re-announce, and upload file).
+re-announce, set announce chat, and upload file).
 
 ### Notes
 
 - If `ANNOUNCE_CHAT_ID` is set, the bot posts announcements there and tries
   to delete that message when you mark an offer sold out. The bot needs admin
   rights in that chat to delete messages.
+- Admin commands require `ADMIN_USER_IDS` to be set so only approved users can
+  manage offers or announcements.
 - Offers are stored in a local SQLite database (`offers.db` by default).
   You can change the path via `OFFERS_DB_PATH`.
 - File uploads use Catbox or Gofile. You can optionally set:

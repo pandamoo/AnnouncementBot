@@ -48,6 +48,14 @@ class OfferStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_offers_active ON offers(active)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+                """
+            )
 
     def add_offer(self, name: str, quantity: int, price: str) -> Offer:
         created_at = datetime.now(timezone.utc).isoformat()
@@ -120,6 +128,21 @@ class OfferStore:
                 (chat_id, message_id, offer_id),
             )
         return cur.rowcount > 0
+
+    def get_setting(self, key: str) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key = ?",
+                (key,),
+            ).fetchone()
+        return str(row["value"]) if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (key, value),
+            )
 
 
 def normalize_price(value: str) -> str:

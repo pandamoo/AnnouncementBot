@@ -75,12 +75,15 @@ FLOW_SOLD_OUT_ID = "sold_out_id"
 FLOW_ANNOUNCE_ID = "announce_id"
 FLOW_UPLOAD_WAIT_FILE = "upload_wait_file"
 
+SETTING_ANNOUNCE_CHAT_ID = "announce_chat_id"
+
 MENU_STOCK = "Stock"
 MENU_ADD = "Add offer"
 MENU_SET_QTY = "Update qty"
 MENU_SET_PRICE = "Update price"
 MENU_SOLD_OUT = "Sold out"
 MENU_ANNOUNCE = "Re-announce"
+MENU_SET_ANNOUNCE = "Set announce chat"
 MENU_UPLOAD = "Upload file"
 MENU_HELP = "Help"
 MENU_MENU = "Menu"
@@ -93,6 +96,7 @@ MENU_LABELS = {
     MENU_SET_PRICE,
     MENU_SOLD_OUT,
     MENU_ANNOUNCE,
+    MENU_SET_ANNOUNCE,
     MENU_UPLOAD,
     MENU_HELP,
     MENU_MENU,
@@ -111,7 +115,7 @@ def _is_admin(user_id: Optional[int]) -> bool:
     if user_id is None:
         return False
     if not ADMIN_USER_IDS:
-        return True
+        return False
     return user_id in ADMIN_USER_IDS
 
 
@@ -124,7 +128,11 @@ def _build_menu(is_admin: bool) -> ReplyKeyboardMarkup:
             [
                 [KeyboardButton(MENU_ADD), KeyboardButton(MENU_SET_QTY)],
                 [KeyboardButton(MENU_SET_PRICE), KeyboardButton(MENU_SOLD_OUT)],
-                [KeyboardButton(MENU_ANNOUNCE), KeyboardButton(MENU_UPLOAD)],
+                [
+                    KeyboardButton(MENU_ANNOUNCE),
+                    KeyboardButton(MENU_SET_ANNOUNCE),
+                ],
+                [KeyboardButton(MENU_UPLOAD)],
             ]
         )
     rows.append([KeyboardButton(MENU_MENU), KeyboardButton(MENU_CANCEL)])
@@ -186,6 +194,11 @@ def _parse_upload_caption(
 
 async def _require_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None
+    if not ADMIN_USER_IDS:
+        await update.effective_message.reply_text(
+            "Admins are not configured. Set ADMIN_USER_IDS to enable admin commands."
+        )
+        return False
     if not _is_admin(user_id):
         await update.effective_message.reply_text(
             "Not authorized. Ask the owner to add you as an admin."
@@ -194,7 +207,18 @@ async def _require_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return True
 
 
-def _announcement_chat_id(update: Update) -> int:
+def _announcement_chat_id(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    store = _get_store(context)
+    stored_value = store.get_setting(SETTING_ANNOUNCE_CHAT_ID)
+    if stored_value:
+        try:
+            return int(stored_value)
+        except ValueError:
+            LOGGER.warning(
+                "Invalid stored announce chat id: %s", stored_value
+            )
     if ANNOUNCE_CHAT_ID:
         return int(ANNOUNCE_CHAT_ID.strip())
     if update.effective_chat is None:
@@ -260,6 +284,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 "",
                 "Admin tip: use Upload file to post sample announcements.",
                 "Send a document with an optional caption to set the header.",
+                "Use Set announce chat in the target group to post there.",
             ]
         )
     await update.effective_message.reply_text(
@@ -288,6 +313,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 "/setprice <id> <price>",
                 "/soldout <id>",
                 "/announce <id>",
+                "/setannounce [chat_id] - set announcement chat",
                 "/upload - start file upload flow",
                 "/cancel - exit the current step",
                 "",
@@ -338,7 +364,7 @@ async def _create_offer_and_announce(
     store = _get_store(context)
     offer = store.add_offer(name=name, quantity=quantity, price=price)
 
-    announce_chat_id = _announcement_chat_id(update)
+    announce_chat_id = _announcement_chat_id(update, context)
     announcement = _build_announcement(offer)
     try:
         sent = await context.bot.send_message(
@@ -371,7 +397,7 @@ async def _send_offer_announcement(
         )
         return False
 
-    announce_chat_id = _announcement_chat_id(update)
+    announce_chat_id = _announcement_chat_id(update, context)
     announcement = _build_announcement(offer)
     try:
         sent = await context.bot.send_message(
@@ -544,6 +570,40 @@ async def announce(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _send_offer_announcement(update, context, offer_id)
 
 
+async def set_announce(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_admin(update, context):
+        return
+    _clear_flow(context)
+    payload = _command_text(update.effective_message.text)
+    chat_id: Optional[int]
+    if payload:
+        try:
+            chat_id = int(payload.strip())
+        except ValueError:
+            await update.effective_message.reply_text(
+                "Chat id must be a number. Example: /setannounce -1001234567890"
+            )
+            return
+    else:
+        if update.effective_chat is None:
+            await update.effective_message.reply_text(
+                "Use this command in the target chat or provide a chat id."
+            )
+            return
+        chat_id = update.effective_chat.id
+
+    store = _get_store(context)
+    store.set_setting(SETTING_ANNOUNCE_CHAT_ID, str(chat_id))
+    if update.effective_chat and update.effective_chat.id == chat_id:
+        await update.effective_message.reply_text(
+            "This chat is now set for announcements."
+        )
+    else:
+        await update.effective_message.reply_text(
+            f"Announcement chat set to {chat_id}."
+        )
+
+
 async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _require_admin(update, context):
         return
@@ -607,7 +667,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             _clear_flow(context)
             return
 
-    announce_chat_id = _announcement_chat_id(update)
+    announce_chat_id = _announcement_chat_id(update, context)
     for outgoing in messages:
         await context.bot.send_message(chat_id=announce_chat_id, text=outgoing)
     if announce_chat_id != update.effective_chat.id:
@@ -909,6 +969,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if text == MENU_ANNOUNCE:
         await _start_announce_flow(update, context)
         return
+    if text == MENU_SET_ANNOUNCE:
+        await set_announce(update, context)
+        return
     if text == MENU_UPLOAD:
         await upload_command(update, context)
         return
@@ -939,6 +1002,7 @@ def main() -> None:
     app.add_handler(CommandHandler("soldout", sold_out))
     app.add_handler(CommandHandler("remove", sold_out))
     app.add_handler(CommandHandler("announce", announce))
+    app.add_handler(CommandHandler("setannounce", set_announce))
     app.add_handler(CommandHandler("upload", upload_command))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
