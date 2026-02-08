@@ -62,3 +62,41 @@ current stock themselves. It also removes old offers when they sell out.
   rights in that chat to delete messages.
 - Offers are stored in a local SQLite database (`offers.db` by default).
   You can change the path via `OFFERS_DB_PATH`.
+
+## File Announcement Module (Bulk Samples)
+
+The `announcement_stock_bot.py` module scans files, counts total lines and
+"valid ULP" lines (lines containing `:` but not `[NOT_SAVED]`), uploads to
+Catbox or Gofile based on size, and builds a ready-to-post announcement.
+
+**Routing logic**
+
+- Files up to 200MB go to Catbox.
+- Files larger than 200MB go to Gofile (with guestToken/folderId reuse so
+  multiple uploads land in the same folder).
+
+**Example usage**
+
+```python
+from announcement_stock_bot import generate_announcement
+
+messages = generate_announcement(
+    files=["sample_10k.txt"],
+    custom_header="Total lines on this are 2.5M, but here is 10k",
+)
+
+for message in messages:
+    print(message)
+```
+
+**Display count helper**
+
+If you want the header to mention the original dataset size while showing a
+smaller sample, pass `display_count` instead of `custom_header`:
+
+```python
+messages = generate_announcement(
+    files=["sample_10k.txt"],
+    display_count="2.5M",
+)
+```
