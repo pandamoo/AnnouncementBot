@@ -29,6 +29,10 @@ current stock themselves. It also removes old offers when they sell out.
    export ANNOUNCE_CHAT_ID="-1001234567890"
    # Optional: override the default ending text
    export CONTACT_TEXT="LMK if interested."
+   # Optional: Catbox userhash for account uploads
+   export CATBOX_USERHASH=""
+   # Optional: size threshold (MB) before switching to Gofile
+   export UPLOAD_THRESHOLD_MB="200"
    ```
 
 3. Run the bot:
@@ -42,6 +46,7 @@ current stock themselves. It also removes old offers when they sell out.
 **Customers**
 
 - `/stock` - show current offers
+- `/menu` - show the button menu
 
 **Admin**
 
@@ -54,6 +59,14 @@ current stock themselves. It also removes old offers when they sell out.
   - Example: `/setprice 12 30`
 - `/soldout <id>` or `/remove <id>`
 - `/announce <id>` - re-send the announcement
+- `/upload` - guided file upload for announcements
+- `/cancel` - exit the current guided step
+
+### Menu Buttons (User Friendly)
+
+The bot shows a button menu you can tap instead of typing commands. Admins
+get extra buttons for guided prompts (add offer, update qty/price, sold out,
+re-announce, and upload file).
 
 ### Notes
 
@@ -62,6 +75,9 @@ current stock themselves. It also removes old offers when they sell out.
   rights in that chat to delete messages.
 - Offers are stored in a local SQLite database (`offers.db` by default).
   You can change the path via `OFFERS_DB_PATH`.
+- File uploads use Catbox or Gofile. You can optionally set:
+  - `CATBOX_USERHASH` for Catbox account uploads
+  - `UPLOAD_THRESHOLD_MB` to override the Catbox vs Gofile size split
 
 ## File Announcement Module (Bulk Samples)
 
@@ -88,6 +104,15 @@ messages = generate_announcement(
 for message in messages:
     print(message)
 ```
+
+**Telegram upload flow**
+
+Admins can also upload a file directly in Telegram:
+
+- Tap **Upload file** (or send `/upload`)
+- Send the file as a document
+- Optional: add a caption to use as the announcement header
+- Tip: use `display: 2.5M` to show original counts in the header
 
 **Display count helper**
 
